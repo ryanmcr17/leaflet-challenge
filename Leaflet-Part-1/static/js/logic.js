@@ -4,143 +4,133 @@ const APIUrl = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/signif
 console.log(APIUrl);
 
 // D3 request to the API URL
-d3.json(APIUrl).then(APIresponse => defineFeatures(APIresponse.features));
+d3.json(APIUrl).then(APIresponse => createEarthquakeMap(APIresponse.features));
 
 
-let featureCoordsArray = [];
-let featureAttributesArray = [];
-let featurePropertiesArray = [];
-
-let featuresArray = [];
-
-let circleMarkers = [];
-
-// function to define/create the features (specific earthquakes) to be added to the map
-function defineFeatures(earthquakeFeatureData) {
+// function to define/create the features (specific earthquakes) and to create the map
+function createEarthquakeMap(earthquakeFeatureData) {
 
 
+  let quakeMarkers = [];
 
-  
+  // loop through the earthquakes/'features' array creating a new circle marker with detailed popup for each quake and pushing them into the quakeMarkers array
+  for (let i = 0; i < earthquakeFeatureData.length; i++) {
 
-
-
-  console.log(earthquakeFeatureData);
-
-  
-    // function to run on each feature in the features array to add a popup with place and date
-    function addFeatureWithPopup(feature, layer) {
+    let feature = earthquakeFeatureData[i];
     
-        let featureCoords = [feature.geometry.coordinates[0],feature.geometry.coordinates[1]];
-        console.log('featureCoords = ' + featureCoords);
+    // API data puts longitude before latitude, have to switch them here for L.circle/marker function argument
+    let coordinates = [feature.geometry.coordinates[1],feature.geometry.coordinates[0]];
+    console.log('Coordinates = ' + coordinates);
 
-        let depth = feature.geometry.coordinates[2];
-        console.log('depth = ' + depth);
+    let magnitude = feature.properties.mag;
+    console.log('magnitude = ' + magnitude);
 
-        let colorBasedOnDepth = '';
-        let magnitude = feature.properties.mag;
-        console.log('magnitude = ' + magnitude);
+    let place = feature.properties.place;
+    console.log('place = ' + place);
 
-        let place = feature.properties.place;
-        console.log('place = ' + place);
+    let date = new Date(feature.properties.time).toLocaleDateString();
+    console.log('date = ' + date);
 
-        let time = feature.properties.time;
-        console.log('time = ' + time);
-        
-        if (depth < 10) {
-            colorBasedOnDepth = 'darkgreen';
-        }   else if (depth < 30) {
-            colorBasedOnDepth = 'green';
-        }   else if (depth < 50) {
-            colorBasedOnDepth = 'lightgreen';
-        }   else if (depth < 70) {
-            colorBasedOnDepth = 'orange';
-        }   else if (depth < 90) {
-            colorBasedOnDepth = 'lightred';
-        }   else {
-            colorBasedOnDepth = 'red';
-        };
+    let depth = feature.geometry.coordinates[2];
+    console.log('depth = ' + depth);
+    let colorBasedOnDepth = '';
 
-        console.log('colorBasedOnDepth = ' + colorBasedOnDepth);
-
-        let featureAttributes = {
-          stroke: false,
-          fillOpacity: 0.75,
-          color: "black",
-          fillColor: colorBasedOnDepth,
-          radius: magnitude
-        };
-
-      ///// create arrays of coords + attribute dicts to call later within 'create map' function to create circles/markers for each feature/earthquake (with .addTo(myMap) appended to the calls within the loop)
-
-
-
-
-        featureCoordsArray.push(featureCoords);
-        
-        featureAttributesArray.push(featureAttributes);
-
-        featurePropertiesArray.push([place,time]);
-
-
-
-        earthquakeMarkers.push(
-          L.circle(featureCoords, featureAttributes).bindPopup(`<h3>${place}</h3><hr><p>${new Date(time)}</p>`)
-        );
-    
+    // determine color to use based on depth of quake
+    if (depth < 10) {
+        colorBasedOnDepth = '#663399';
+    }   else if (depth < 30) {
+        colorBasedOnDepth = '#0000FF';
+    }   else if (depth < 50) {
+        colorBasedOnDepth = '#006400';
+    }   else if (depth < 70) {
+        colorBasedOnDepth = '#FFFF00';
+    }   else if (depth < 90) {
+        colorBasedOnDepth = '#FFA500';
+    }   else {
+        colorBasedOnDepth = '#FF0000';
     };
+    console.log('colorBasedOnDepth = ' + colorBasedOnDepth);
 
-    // create GeoJSON layer from the features array from earthquakeFeatureData, running addFeatureWithPopup as the 'onEachFeature' on each element of the array
-    let earthquakesLayer = L.geoJSON(earthquakeFeatureData, {
-        onEachFeature: addFeatureWithPopup
-    });
+    // save attributes dict/JSON for circle marker
+    let featureAttributes = {
+      stroke: false,
+      fillOpacity: 0.75,
+      color: "black",
+      fillColor: colorBasedOnDepth,
+      radius: Math.pow(magnitude*15,3)
+    };
+    
+    // create circle marker based on coordinates + attributes dict, with detailed popup showing additional info
+    quakeMarkers.push(
+      L.circle(coordinates, featureAttributes)
+      .bindPopup(`<h3>${place}</h3><hr>
+      Date: ${date}<br>
+      Magnitude: ${magnitude}<br>
+      Depth: ${depth}<br>
+      Coordinates: ${coordinates}`)
+    );
 
-    // pass earthquakesLayer to the createEarthquakeMap function
-    createEarthquakeMap(earthquakeMarkers);
+  }
+
+
+  // create overlay layer from quakeMarkers array
+  let quakeLayer = L.layerGroup(quakeMarkers);
+
+
+  // create base layers
+  let street = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  })
+
+  let topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+    attribution: 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)'
+  });
+
+
+  // create baseMaps object
+  let baseMaps = {
+    "Street Map": street,
+    "Topographic Map": topo
+  };
+
+
+  // create overlayMaps object to hold our quakeLayer of earthquake markers with popups
+  let overlayMaps = {
+    "Significant Earthquakes (past 30 days)": quakeLayer
+  };
+
+
+  // create map, passing streetmap and earthquakes layers to display on load, showing the entire world centered on [0,0]
+  let myMap = L.map("map", {
+    center: [
+      0,0
+    ],
+    zoom: 2,
+    layers: [street, quakeLayer]
+  });
+
+  
+  // add a legend showing how the marker colors represent earthquake depth
+
+  var legend = L.control({
+    position: 'bottomright'
+  });
+
+  legend.onAdd = function(map) {
+    var div = L.DomUtil.create('div', 'depth legend');
+    div.style.backgroundColor = "white";
+    div.style.border = "thin solid black";
+    div.innerHTML = '<h3>Earthquake depth (km)</h3><svg width="10" height="10"><rect width="10" height="10" fill="#663399"/></svg>  -10 - 10<br><svg width="10" height="10"><rect width="10" height="10" fill="#0000FF"/></svg>  10 - 30<br><svg width="10" height="10"><rect width="10" height="10" fill="#006400"/></svg>  30 - 50<br><svg width="10" height="10"><rect width="10" height="10" fill="#FFFF00"/></svg>  50 - 70<br><svg width="10" height="10"><rect width="10" height="10" fill="#FFA500"/></svg>  70 - 90<br><svg width="10" height="10"><rect width="10" height="10" fill="#FF0000"/></svg>  90+<br>';
+    return div;        
+  };
+
+  legend.addTo(myMap);
+
+
+  // create layer control with baseMaps and overlayMaps objects and add it to the map
+  L.control.layers(baseMaps, overlayMaps, {
+    collapsed: false
+  }).addTo(myMap);
+
 
 };
-
-
-
-function createEarthquakeMap(earthquakeLayer) {
-
-    // Create the base layers.
-    let street = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-    })
-  
-    let topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
-      attribution: 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)'
-    });
-  
-    // Create a baseMaps object.
-    let baseMaps = {
-      "Street Map": street,
-      "Topographic Map": topo
-    };
-  
-    // Create an overlay object to hold our overlay.
-    let overlayMaps = {
-      "Significant Earthquakes (past 30 days)": earthquakeLayer
-    };
-  
-    // Create our map, giving it the streetmap and earthquakes layers to display on load.
-    let myMap = L.map("map", {
-      center: [
-        0,-100
-      ],
-      zoom: 2,
-      layers: [street, earthquakeLayer]
-    });
-
-
-
-  
-    // Create a layer control.
-    // Pass it our baseMaps and overlayMaps.
-    // Add the layer control to the map.
-    L.control.layers(baseMaps, overlayMaps, {
-      collapsed: false
-    }).addTo(myMap);
-  
-};
-  
